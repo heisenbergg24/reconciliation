@@ -360,6 +360,13 @@ app.get('/api/dataset/download-cleaned', (req, res) => {
 });
 
 
+// 12b. GET: Download the Power BI workbook (written by analytics.py)
+app.get('/api/powerbi/download', (req, res) => {
+  const filePath = path.join(__dirname, 'powerbi', 'reconciliation_powerbi.xlsx');
+  if (fs.existsSync(filePath)) res.download(filePath, 'reconciliation_powerbi.xlsx');
+  else res.status(404).json({ error: 'Not generated yet. Run reconciliation first.' });
+});
+
 // 13. GET: Fetch Unmatched Transactions for Exception Management
 // A statement is unmatched when it has no row in RECONCILIATION
 // (independent of whatever text is stored in BANK_STATEMENT.status).

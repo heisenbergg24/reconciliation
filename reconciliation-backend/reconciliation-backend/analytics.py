@@ -2,9 +2,14 @@ import sqlite3
 import pandas as pd
 import numpy as np
 import json
+import os
+import zipfile
+from datetime import datetime, timezone
 
 DB_PATH = '/home/pratik/Desktop/dbms/miniproject/miniproject'
 OUTPUT_CSV_PATH = '/home/pratik/Desktop/dbms/miniproject/reconciliation-backend/reconciliation-backend/cleaned_reconciliation_dataset.csv'
+
+POWERBI_DIR = os.path.join(os.path.dirname(OUTPUT_CSV_PATH), 'powerbi')
 
 # Variance bands used by the heat map (upper bound inclusive)
 BAND_BINS = [-np.inf, 0, 1, 5, 10, np.inf]
@@ -107,5 +112,50 @@ def run_data_pipeline():
     }
 
 
+def fix_xlsx_timestamps(path):
+    """Power Query rejects the fractional-second timestamps some openpyxl versions write; rewrite them cleanly."""
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    core = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+            'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '
+            'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+            f'<dcterms:created xsi:type="dcterms:W3CDTF">{now}</dcterms:created>'
+            f'<dcterms:modified xsi:type="dcterms:W3CDTF">{now}</dcterms:modified>'
+            '</cp:coreProperties>')
+    tmp = path + '.tmp'
+    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            zout.writestr(item, core if item.filename == 'docProps/core.xml' else zin.read(item.filename))
+    os.replace(tmp, path)
+
+
+def export_for_powerbi(r):
+    """One CSV per chart, in the shape Power BI wants (load with Get Data > Text/CSV or Folder)."""
+    os.makedirs(POWERBI_DIR, exist_ok=True)
+    hm = pd.DataFrame(r['heatmap']['cells'], columns=['party', 'band', 'count'])
+    hm['band_order'] = hm['band'].map({b: i for i, b in enumerate(BAND_LABELS)})
+    sets = {
+        'match_distribution': pd.DataFrame(r['match_distribution'], columns=['name', 'value'])
+            .rename(columns={'name': 'match_status', 'value': 'count'}),
+        'party_analysis': pd.DataFrame(r['party_analysis'],
+            columns=['party_name', 'total_invoiced', 'total_paid', 'total_variance']),
+        'timeline': pd.DataFrame(r['timeline'],
+            columns=['date', 'total_deposits', 'matched_amount', 'unmatched_amount']),
+        'heatmap': hm,
+    }
+    for name, df in sets.items():
+        df.to_csv(os.path.join(POWERBI_DIR, name + '.csv'), index=False)
+    try:  # one Excel file, one sheet per chart: upload this single file to Power BI
+        with pd.ExcelWriter(os.path.join(POWERBI_DIR, 'reconciliation_powerbi.xlsx')) as w:
+            for name, df in sets.items():
+                df.to_excel(w, sheet_name=name, index=False)
+        fix_xlsx_timestamps(os.path.join(POWERBI_DIR, 'reconciliation_powerbi.xlsx'))
+    except ImportError:
+        pass  # pip install openpyxl
+    return {name: len(df) for name, df in sets.items()}
+
+
 if __name__ == '__main__':
-    print(json.dumps(run_data_pipeline()))
+    result = run_data_pipeline()
+    export_for_powerbi(result)
+    print(json.dumps(result))

@@ -27,6 +27,9 @@ import {
   CartesianGrid,
 } from "recharts";
 
+// Paste the Power BI embed / "Publish to web" URL here once the report is published
+const POWERBI_URL = "";
+
 const STATUS_COLORS = {
   MATCHED: "#10b981",
   PARTIAL: "#f59e0b",
@@ -694,6 +697,34 @@ export default function App() {
             </h3>
           </div>
           <HeatMap data={analytics?.heatmap} />
+        </div>
+      </div>
+
+      {/* Data Visualizations (Power BI) */}
+      <div
+        style={{
+          background: "#fff",
+          padding: "20px",
+          borderRadius: "12px",
+          marginBottom: "32px",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.04)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+          <BarChart2 size={18} color="#f2c811" />
+          <h3 style={{ margin: 0, fontSize: "15px" }}>Power BI Dashboard</h3>
+        </div>
+        {POWERBI_URL ? (
+          <iframe title="Power BI Report" src={POWERBI_URL} width="100%" height="620" style={{ border: "none" }} allowFullScreen />
+        ) : (
+          <p style={{ color: "#64748b", fontSize: "14px" }}>
+            Download the workbook, upload it to Power BI (replace the old file), then refresh your report.
+          </p>
+        )}
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "12px", justifyContent: "center" }}>
+          <a href="http://localhost:5000/api/powerbi/download" style={{ fontSize: "13px", fontWeight: 600, color: "#2563eb" }}>
+            Download Power BI workbook (.xlsx)
+          </a>
         </div>
       </div>
 
